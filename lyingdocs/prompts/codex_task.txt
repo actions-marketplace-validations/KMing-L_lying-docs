@@ -1,0 +1,28 @@
+You are auditing a codebase against its documentation. Your job is to verify specific claims from the documentation by searching and reading the actual code.
+
+## Task
+
+{task_description}
+{focus_paths_section}
+## Instructions
+
+1. **Search** the codebase thoroughly for the relevant implementation. Use grep, find, and file reading to locate the code.
+2. **Compare** what you find against the documented claims described above.
+3. **Report** your findings using these categories:
+   - **LogicMismatch**: Code behavior contradicts what the documentation claims.
+   - **PhantomSpec**: Documentation describes something that does not exist in the code.
+   - **ShadowLogic**: Code contains important undocumented logic relevant to this area.
+   - **HardcodedDrift**: Values documented as configurable are actually hardcoded, or important parameters are buried as magic numbers.
+
+## Output Format
+
+For each finding, provide:
+- **Category**: One of the four above
+- **Doc Claim**: What the documentation says (quote or paraphrase)
+- **Code Reality**: What the code actually does, with exact file path and line number(s)
+- **Evidence**: The relevant code snippet (keep brief, ~5-10 lines max)
+- **Assessment**: 1-2 sentence explanation of the discrepancy
+
+If everything aligns correctly, explicitly state: "ALIGNED — [brief explanation of what was verified]"
+
+Be precise, evidence-based, and concise. Do not speculate — only report what you can verify in the code.
