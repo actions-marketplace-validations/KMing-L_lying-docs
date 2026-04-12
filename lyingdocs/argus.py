@@ -16,14 +16,9 @@ class ArgusDispatcher:
     def __init__(self, config: dict):
         self.config = config
         self.backend = config["argus_backend"]
-        self._resolved = False
         self._codex_bin: str | None = None
         self._claude_bin: str | None = None
 
-    def _resolve_once(self) -> None:
-        if self._resolved:
-            return
-        self._resolved = True
         if self.backend == "codex":
             self._codex_bin = find_codex_binary(self.config)
             if self._codex_bin:
@@ -56,8 +51,6 @@ class ArgusDispatcher:
         task_id: str,
         focus_paths: list[str] | None = None,
     ) -> str:
-        self._resolve_once()
-
         if self.backend == "codex":
             return run_codex_task(
                 self.config,
