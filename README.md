@@ -20,7 +20,11 @@ LyingDocs deploys two autonomous agents against your repository to surface these
 
 **Hermes** autonomously traverses your documentation, plans an audit strategy, and dispatches targeted analysis tasks.
 
-**Codex** executes each task against your actual codebase, reporting what the code *really* does.
+**Argus** executes each task against your actual codebase, reporting what the code *really* does. You choose how Argus investigates the code — pick the backend that fits your setup:
+
+- **`codex`** — [OpenAI Codex CLI](https://github.com/openai/codex) subprocess
+- **`claude_code`** — [Claude Code](https://docs.anthropic.com/claude/docs/claude-code) CLI subprocess (`claude -p`)
+- **`local`** — a built-in minimal agent loop that uses filesystem tools and calls any OpenAI-compatible API directly (no external CLI required)
 
 Hermes reconciles the two — and writes you a report.
 
@@ -49,55 +53,113 @@ LyingDocs loads configuration from multiple sources (later overrides earlier):
 3. **Environment variables** / `.env` file
 4. **CLI arguments**
 
+Hermes and Argus are configured independently, so you can run a cheaper planner model for Hermes and a stronger coder model for Argus (or point them at entirely different API endpoints).
+
 ### Config File Example
 
 ```toml
-base_url = "https://api.openai.com/v1"
+[hermes]
 model = "gpt-5.4"
+base_url = "https://api.openai.com/v1"
+# api_key_env = "OPENAI_API_KEY"  # optional — defaults to OPENAI_API_KEY
 
-[codex]
-enabled = true
+[argus]
+backend = "local"           # "codex" | "claude_code" | "local"
+model = "gpt-5.4"
+base_url = "https://api.openai.com/v1"
+# api_key_env = "OPENAI_API_KEY"
+
+# Only read when argus.backend = "codex"
+[argus.codex]
 provider = "openai"
 wire_api = "responses"
-# path = "/usr/local/bin/codex"  # optional: explicit path to codex binary
+# path = "/usr/local/bin/codex"   # optional: explicit codex binary path
+
+# Only read when argus.backend = "claude_code"
+[argus.claude_code]
+# path = "/usr/local/bin/claude"  # optional: explicit claude binary path
+
+# Only read when argus.backend = "local"
+[argus.local]
+max_iterations = 25         # per-task agent loop cap
+max_read_bytes = 200000     # per read_file call
 
 [limits]
-max_dispatches = 20
-max_iterations = 50
-codex_task_timeout = 1200
-token_budget = 524288
+max_dispatches = 20         # max Argus dispatches per Hermes run
+max_iterations = 50         # max Hermes loop iterations
+argus_task_timeout = 1200   # seconds per Argus task (codex / claude_code backends)
+token_budget = 524288       # Hermes context budget before compression
 ```
+
+> **Note:** The previous flat format (top-level `model` / `base_url` and a `[codex]` section) is no longer supported. LyingDocs will exit with a clear migration error if it sees the old shape — move to `[hermes]` / `[argus]` as shown above.
 
 ### Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `OPENAI_API_KEY` | **Required.** Your OpenAI API key |
-| `BASE_URL` | API base URL |
-| `MODEL` | LLM model name |
-| `CODEX_PROVIDER` | Codex CLI model provider |
-| `CODEX_WIRE_API` | Codex CLI provider wire_api setting ('responses' or 'chat') |
-| `CODEX_PATH` | Explicit path to codex binary |
-| `CODEX_TASK_TIMEOUT` | Timeout per codex task (seconds) |
-| `TOKEN_BUDGET` | Max context tokens before compression |
+| `OPENAI_API_KEY` | **Required.** API key used by both agents unless overridden via `api_key_env` |
+| `HERMES_MODEL` | Hermes LLM model name |
+| `HERMES_BASE_URL` | Hermes API base URL |
+| `ARGUS_BACKEND` | `codex`, `claude_code`, or `local` |
+| `ARGUS_MODEL` | Argus LLM model name |
+| `ARGUS_BASE_URL` | Argus API base URL |
+| `ARGUS_CODEX_PROVIDER` | Codex backend: provider name |
+| `ARGUS_CODEX_WIRE_API` | Codex backend: provider wire_api (`responses` or `chat`) |
+| `ARGUS_CODEX_PATH` | Codex backend: explicit path to the `codex` binary |
+| `ARGUS_CLAUDE_CODE_PATH` | Claude Code backend: explicit path to the `claude` binary |
+| `ARGUS_TASK_TIMEOUT` | Timeout per Argus task (seconds, used by codex / claude_code backends) |
+| `TOKEN_BUDGET` | Hermes context tokens before compression |
 
 ---
 
-## Codex CLI Setup
+## Argus Backends
 
-LyingDocs optionally uses [OpenAI Codex CLI](https://github.com/openai/codex) for deep code analysis. Without it, the agent will still work but rely on documentation analysis only.
+Argus is the "deep code analysis" side of the pipeline. Pick one backend in `lyingdocs.toml` (or via `--argus-backend`):
+
+### `local` (no external CLI required)
+
+A built-in agent loop that uses `list_directory` / `read_file` / `search_code` / `finish` tools and calls any OpenAI-compatible chat completions API directly. Best for getting started — only needs an API key.
+
+```toml
+[argus]
+backend = "local"
+model = "gpt-5.4"
+base_url = "https://api.openai.com/v1"
+```
+
+### `codex` ([OpenAI Codex CLI](https://github.com/openai/codex))
 
 ```bash
 npm install -g @openai/codex
-
-# Or disable entirely
-lyingdocs analyze --doc-path docs/ --code-path . --no-codex
 ```
 
-LyingDocs auto-detects Codex in this order:
-1. Explicit path from config (`codex.path`)
-2. System PATH (`which codex`)
+```toml
+[argus]
+backend = "codex"
+
+[argus.codex]
+provider = "openai"
+wire_api = "responses"
+# path = "/usr/local/bin/codex"  # optional
+```
+
+Codex is auto-detected in this order:
+1. Explicit path from config (`argus.codex.path`)
+2. System `PATH` (`which codex`)
 3. Local `node_modules/.bin/codex`
+
+### `claude_code` ([Claude Code](https://docs.anthropic.com/claude/docs/claude-code))
+
+```toml
+[argus]
+backend = "claude_code"
+model = "claude-sonnet-4-6"
+
+[argus.claude_code]
+# path = "/usr/local/bin/claude"  # optional; else resolved via PATH
+```
+
+Invoked as `claude -p <prompt> --model <argus_model> --output-format text` with `cwd` set to your code root.
 
 ---
 
@@ -107,14 +169,16 @@ LyingDocs auto-detects Codex in this order:
 # Full analysis
 lyingdocs analyze --doc-path docs/ --code-path . -o output/audit
 
-# With custom model
-lyingdocs analyze --doc-path docs/ --code-path . -m gpt-4o-mini
+# Pick the Argus backend on the command line
+lyingdocs analyze --doc-path docs/ --code-path . --argus-backend=local
+
+# Different models for Hermes and Argus
+lyingdocs analyze --doc-path docs/ --code-path . \
+  --hermes-model gpt-4o-mini \
+  --argus-model gpt-5.4
 
 # Resume interrupted analysis
 lyingdocs analyze --doc-path docs/ --code-path . --resume
-
-# Without Codex
-lyingdocs analyze --doc-path docs/ --code-path . --no-codex
 
 # With explicit config file
 lyingdocs analyze --doc-path docs/ --code-path . --config myconfig.toml
@@ -122,6 +186,8 @@ lyingdocs analyze --doc-path docs/ --code-path . --config myconfig.toml
 # Show version
 lyingdocs version
 ```
+
+Available flags: `--hermes-model`, `--hermes-base-url`, `--argus-backend {codex,claude_code,local}`, `--argus-model`, `--argus-base-url`, `--argus-codex-provider`, `--argus-codex-wire-api`, `--max-dispatches`, `--max-iterations`, `--config`, `--resume`.
 
 ---
 
@@ -138,8 +204,9 @@ lyingdocs version
 
 ## Roadmap
 
-- [ ] **Multi-harness support** — plug in Claude Code or any code agent alongside Codex
+- [x] **Multi-harness support** — Argus now runs on Codex, Claude Code, or a built-in local agent
 - [ ] **Deeper analysis** — multi-hop reasoning across doc hierarchies; version-aware diffing to catch when code changed but docs didn't
+- [ ] **Customization for papers** — a "paper mode" that treats academic papers as documentation and surfaces misalignments between paper claims and code behavior
 - [ ] **Auto-fix mode** — Hermes proposes doc patches; you review and apply
 
 ---

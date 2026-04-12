@@ -14,12 +14,14 @@ PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 def find_codex_binary(config: dict) -> str | None:
     """Locate the codex CLI binary. Returns path string or None."""
     # 1. Explicit path from config
-    explicit = config.get("codex_path")
+    explicit = config.get("argus_codex_path")
     if explicit:
         p = Path(explicit)
         if p.is_file() and os.access(str(p), os.X_OK):
             return str(p)
-        logger.warning("Configured codex_path not found or not executable: %s", p)
+        logger.warning(
+            "Configured argus.codex.path not found or not executable: %s", p
+        )
 
     # 2. System PATH (globally installed via npm install -g @openai/codex)
     system_codex = shutil.which("codex")
@@ -37,20 +39,23 @@ def find_codex_binary(config: dict) -> str | None:
 
 def codex_provider_flags(config: dict) -> list[str]:
     """Return the CLI flags that configure the model provider for codex."""
-    p = config.get("codex_provider", "openai")
+    p = config.get("argus_codex_provider", "openai")
+    model = config["argus_model"]
 
     # For the default OpenAI provider, codex knows it natively — just set model
     if p == "openai":
-        return ["-m", config["model"]]
+        return ["-m", model]
 
     # Custom provider: inject full provider config
+    env_key = config.get("argus_api_key_env", "OPENAI_API_KEY")
+    wire_api = config.get("argus_codex_wire_api", "responses")
     return [
-        "-m", config["model"],
+        "-m", model,
         "-c", f'model_provider="{p}"',
         "-c", f'model_providers.{p}.name="{p}"',
-        "-c", f'model_providers.{p}.base_url="{config["base_url"]}"',
-        "-c", f'model_providers.{p}.env_key="OPENAI_API_KEY"',
-        "-c", f'model_providers.{p}.wire_api="{config.get("wire_api", "responses")}"',
+        "-c", f'model_providers.{p}.base_url="{config["argus_base_url"]}"',
+        "-c", f'model_providers.{p}.env_key="{env_key}"',
+        "-c", f'model_providers.{p}.wire_api="{wire_api}"',
         "-c", 'model_reasoning_effort="high"',
     ]
 
@@ -91,8 +96,8 @@ def run_codex_task(
         focus_paths_section=focus_section,
     )
 
-    output_file = output_dir / f"codex_task_{task_id}.txt"
-    stderr_file = output_dir / f"codex_stderr_{task_id}.txt"
+    output_file = output_dir / f"argus_task_{task_id}.txt"
+    stderr_file = output_dir / f"argus_stderr_{task_id}.txt"
 
     cmd = [
         codex_bin, "exec",
@@ -113,7 +118,7 @@ def run_codex_task(
             input=full_prompt,
             capture_output=True,
             text=True,
-            timeout=config.get("codex_task_timeout", 1200),
+            timeout=config.get("argus_task_timeout", 1200),
             env=os.environ.copy(),
         )
 
@@ -145,6 +150,6 @@ def run_codex_task(
     except subprocess.TimeoutExpired:
         logger.error(
             "  Codex task %s timed out after %ds",
-            task_id, config.get("codex_task_timeout", 1200),
+            task_id, config.get("argus_task_timeout", 1200),
         )
         return "[ERROR] Codex task timed out."

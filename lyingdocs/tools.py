@@ -1,11 +1,11 @@
-"""Tool implementations and OpenAI function schemas for DocentAgent."""
+"""Tool implementations and OpenAI function schemas for HermesAgent."""
 
 import json
 import logging
 import re
 from pathlib import Path
 
-from .codex import run_codex_task
+from .argus import ArgusDispatcher
 from .workspace import CATEGORIES, SEVERITIES, Workspace
 
 logger = logging.getLogger("lyingdocs")
@@ -94,11 +94,12 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
-            "name": "dispatch_codex",
+            "name": "dispatch_argus",
             "description": (
-                "Dispatch an atomic code analysis task to Codex CLI. The task should be "
-                "specific and targeted — reference concrete doc claims and what to verify "
-                "in the codebase. Each dispatch uses one unit of your budget."
+                "Dispatch an atomic code analysis task to Argus (the deep code analyst). "
+                "The task should be specific and targeted — reference concrete doc claims "
+                "and what to verify in the codebase. Each dispatch uses one unit of your "
+                "budget."
             ),
             "parameters": {
                 "type": "object",
@@ -238,14 +239,13 @@ class ToolExecutor:
         output_dir: Path,
         workspace: Workspace,
         config: dict,
-        codex_bin: str | None = None,
     ):
         self.doc_root = doc_root.resolve()
         self.code_path = code_path
         self.output_dir = output_dir
         self.workspace = workspace
         self.config = config
-        self.codex_bin = codex_bin
+        self.argus = ArgusDispatcher(config)
 
     def execute(self, tool_name: str, arguments: dict) -> str:
         """Dispatch a tool call and return the result string."""
@@ -341,37 +341,28 @@ class ToolExecutor:
             return f"No matches found for pattern: {pattern}"
         return "\n".join(results)
 
-    def _tool_dispatch_codex(
+    def _tool_dispatch_argus(
         self, task_description: str, focus_paths: list[str] | None = None
     ) -> str:
-        if not self.config.get("codex_enabled", True) or not self.codex_bin:
-            return (
-                "[UNAVAILABLE] Codex CLI is not available. "
-                "Install via 'npm install -g @openai/codex' or enable it in config. "
-                "Continue auditing using documentation analysis only."
-            )
-
         if self.workspace.is_budget_exhausted():
             return (
-                "[ERROR] Codex dispatch budget exhausted. "
+                "[ERROR] Argus dispatch budget exhausted. "
                 "You should finalize the report with the findings collected so far."
             )
 
         self.workspace.increment_dispatch()
         task_id = f"{self.workspace.codex_dispatch_count:03d}"
 
-        result = run_codex_task(
-            self.config,
+        result = self.argus.run(
             task_description,
             self.code_path,
             self.output_dir,
             task_id,
             focus_paths,
-            codex_bin=self.codex_bin,
         )
 
         remaining = self.workspace.dispatches_remaining()
-        footer = f"\n\n[Codex dispatches remaining: {remaining}/{self.workspace.max_dispatches}]"
+        footer = f"\n\n[Argus dispatches remaining: {remaining}/{self.workspace.max_dispatches}]"
         return result + footer
 
     def _tool_record_finding(

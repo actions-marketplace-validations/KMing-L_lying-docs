@@ -1,4 +1,4 @@
-"""DocentAgent: autonomous documentation-code misalignment detection agent."""
+"""HermesAgent: autonomous documentation-code misalignment detection agent."""
 
 import json
 import logging
@@ -6,7 +6,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from pathlib import Path
 
-from .codex import find_codex_binary
 from .doctree import DocTree
 from .llm import call_llm, call_llm_with_tools, make_client
 from .tools import TOOL_SCHEMAS, ToolExecutor
@@ -17,7 +16,7 @@ logger = logging.getLogger("lyingdocs")
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
 
-class DocentAgent:
+class HermesAgent:
     """Autonomous agent that traverses documentation and dispatches code audits."""
 
     def __init__(
@@ -32,8 +31,11 @@ class DocentAgent:
         self.code_path = code_path
         self.output_dir = output_dir
 
-        self.client = make_client(config)
-        self.model = config["model"]
+        self.client = make_client(
+            api_key=config["hermes_api_key"],
+            base_url=config["hermes_base_url"],
+        )
+        self.model = config["hermes_model"]
         self.max_iterations = config.get("max_iterations", 50)
         self.token_budget = config.get("token_budget", 524_288)
 
@@ -42,19 +44,10 @@ class DocentAgent:
             output_dir, max_dispatches=config.get("max_dispatches", 20)
         )
 
-        # Resolve codex binary once at startup
-        self.codex_bin = None
-        if config.get("codex_enabled", True):
-            self.codex_bin = find_codex_binary(config)
-            if self.codex_bin:
-                logger.info("Codex CLI found: %s", self.codex_bin)
-            else:
-                logger.warning(
-                    "Codex CLI not found. Code analysis dispatches will be unavailable. "
-                    "Install via: npm install -g @openai/codex"
-                )
-        else:
-            logger.info("Codex CLI disabled by configuration.")
+        logger.info(
+            "Hermes model=%s  Argus backend=%s  Argus model=%s",
+            self.model, config["argus_backend"], config["argus_model"],
+        )
 
         self.tool_executor = ToolExecutor(
             doc_root=doc_path,
@@ -62,7 +55,6 @@ class DocentAgent:
             output_dir=output_dir,
             workspace=self.workspace,
             config=config,
-            codex_bin=self.codex_bin,
         )
 
         self.messages: list[dict] = []
@@ -86,7 +78,7 @@ class DocentAgent:
             {"role": "user", "content": kickoff},
         ]
 
-        logger.info("DocentAgent started — %d doc files indexed", len(self.doctree.files))
+        logger.info("HermesAgent started — %d doc files indexed", len(self.doctree.files))
 
         # Agent loop
         iteration = 0
@@ -166,11 +158,11 @@ class DocentAgent:
 
             # Budget check
             if self.workspace.is_budget_exhausted():
-                logger.warning("Codex dispatch budget exhausted — nudging agent to finalize.")
+                logger.warning("Argus dispatch budget exhausted — nudging agent to finalize.")
                 self.messages.append({
                     "role": "user",
                     "content": (
-                        "Your Codex dispatch budget is exhausted. Please call "
+                        "Your Argus dispatch budget is exhausted. Please call "
                         "finalize_report now to generate the final report with "
                         "the findings collected so far."
                     ),
@@ -207,21 +199,20 @@ class DocentAgent:
                 + self.workspace.get_progress_summary()
             )
 
-        codex_status = (
-            f"Codex dispatches available: {self.workspace.dispatches_remaining()}"
-            if self.codex_bin
-            else "Codex CLI: NOT AVAILABLE — you must rely on documentation analysis only"
+        argus_status = (
+            f"Argus dispatches available: {self.workspace.dispatches_remaining()} "
+            f"(backend: {self.config['argus_backend']})"
         )
 
         return (
             f"## Documentation to Audit\n\n{overview}\n\n"
             f"## Code Repository\nPath: {self.code_path}\n\n"
             f"## Your Budget\n"
-            f"{codex_status}\n"
+            f"{argus_status}\n"
             f"Max iterations: {self.max_iterations}\n"
             f"{progress}\n\n"
             "Begin your audit. Start by examining the high-priority documentation "
-            "files, then formulate targeted questions for Codex."
+            "files, then formulate targeted questions for Argus."
         )
 
     def _response_to_message(self, response) -> dict:
@@ -331,7 +322,7 @@ class DocentAgent:
             f"```json\n{findings_json}\n```\n\n"
             f"## Audit Coverage\n"
             f"Sections audited: {len(self.workspace.completed_sections)}\n"
-            f"Codex dispatches used: {self.workspace.codex_dispatch_count}\n"
+            f"Argus dispatches used: {self.workspace.codex_dispatch_count}\n"
         )
 
         report = call_llm(

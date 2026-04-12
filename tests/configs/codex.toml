@@ -1,0 +1,16 @@
+# Argus backend: codex (OpenAI Codex CLI subprocess)
+[hermes]
+model = "gpt-5.4-mini"
+base_url = "https://api.openai.com/v1"
+
+[argus]
+backend = "codex"
+model = "gpt-5.4-mini"
+
+[argus.codex]
+
+[limits]
+max_dispatches = 2
+max_iterations = 5
+argus_task_timeout = 600
+token_budget = 200000

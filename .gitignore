@@ -5,3 +5,5 @@ build/
 
 lyingdocs.toml
 .env
+
+tests/out/

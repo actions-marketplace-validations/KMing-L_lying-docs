@@ -1,0 +1,19 @@
+# Argus backend: local (in-process agent loop, no external CLI)
+[hermes]
+model = "gpt-5.4-mini"
+base_url = "https://api.openai.com/v1"
+
+[argus]
+backend = "local"
+model = "gpt-5.4-mini"
+base_url = "https://yeysai.com/v1"
+
+[argus.local]
+max_iterations = 15
+max_read_bytes = 100000
+
+[limits]
+max_dispatches = 2
+max_iterations = 2
+argus_task_timeout = 600
+token_budget = 200000

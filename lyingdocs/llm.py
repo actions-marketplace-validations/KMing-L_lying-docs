@@ -9,8 +9,8 @@ from openai import APIConnectionError, APIError, OpenAI, RateLimitError
 logger = logging.getLogger("lyingdocs")
 
 
-def make_client(config: dict) -> OpenAI:
-    return OpenAI(api_key=config["api_key"], base_url=config["base_url"])
+def make_client(api_key: str, base_url: str) -> OpenAI:
+    return OpenAI(api_key=api_key, base_url=base_url)
 
 
 def call_llm(

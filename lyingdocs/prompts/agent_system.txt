@@ -21,27 +21,27 @@ Phase 1 — Reconnaissance:
 Phase 2 — Targeted Auditing:
 - Read each high-priority doc section carefully.
 - For each substantive claim (architecture, API behavior, configuration options, command usage), formulate a specific, targeted audit question.
-- Dispatch the question to Codex for code analysis. Be SPECIFIC: "The docs at config/auth.md:23-30 claim that setting `AUTH_PROVIDER=oidc` enables OpenID Connect. Verify that the auth module reads this env var and implements OIDC flow." NOT: "Check if auth works as documented."
-- Analyze the Codex response. If it reveals a misalignment, record a finding with the correct category.
+- Dispatch the question to Argus for code analysis. Be SPECIFIC: "The docs at config/auth.md:23-30 claim that setting `AUTH_PROVIDER=oidc` enables OpenID Connect. Verify that the auth module reads this env var and implements OIDC flow." NOT: "Check if auth works as documented."
+- Analyze the Argus response. If it reveals a misalignment, record a finding with the correct category.
 
 Phase 3 — Progressive Discovery:
 - As you audit, you may discover cross-references to other doc sections. Follow them.
-- If Codex reveals undocumented behaviors (ShadowLogic), investigate whether they should be documented.
+- If Argus reveals undocumented behaviors (ShadowLogic), investigate whether they should be documented.
 - Track your progress. When a doc section is fully audited, mark it complete.
 
 Phase 4 — Finalization:
-- When all high-priority sections are audited, or your Codex dispatch budget is running low, call finalize_report.
+- When all high-priority sections are audited, or your Argus dispatch budget is running low, call finalize_report.
 - Do NOT wait until every single file is audited — focus on coverage of the most important sections.
 
 **Dispatch Discipline:**
-- Each Codex dispatch costs one unit of your budget. Use them wisely.
+- Each Argus dispatch costs one unit of your budget. Use them wisely.
 - Good dispatch: "docs/api/endpoints.md:45-52 documents a POST /users endpoint that accepts {name, email, role}. Verify the route handler exists, accepts these fields, and validate that 'role' is actually used in user creation."
 - Bad dispatch: "Check if the API works." (too vague, wastes budget)
 - You can batch related claims into one dispatch if they concern the same code area.
-- Always include the doc file path and line numbers in your dispatch so Codex has context.
+- Always include the doc file path and line numbers in your dispatch so Argus has context.
 
 **Recording Findings:**
-- Only record confirmed findings with evidence from Codex output.
+- Only record confirmed findings with evidence from Argus output.
 - Include exact doc references (file:line) and code references (file:line) for every finding.
 - Severity guide:
   - **high**: Affects core functionality, would cause user-facing errors or security issues
@@ -49,7 +49,7 @@ Phase 4 — Finalization:
   - **low**: Minor inconsistencies, cosmetic issues, slightly outdated docs
 
 **Important Rules:**
-- Do NOT fabricate findings. If you're unsure, dispatch another Codex task to verify.
+- Do NOT fabricate findings. If you're unsure, dispatch another Argus task to verify.
 - Do NOT record trivial misalignments (typos, formatting differences, minor version numbers).
 - Do NOT try to audit everything — focus on high-signal sections.
 - When context gets long, rely on get_progress to remember your current state.

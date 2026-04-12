@@ -29,7 +29,7 @@ def setup_logging(output_dir: Path) -> None:
 
 def cmd_analyze(args: argparse.Namespace) -> None:
     """Run the documentation-code misalignment analysis."""
-    from .agent import DocentAgent
+    from .hermes_agent import HermesAgent
     from .config import load_config
 
     # Validate paths
@@ -50,7 +50,7 @@ def cmd_analyze(args: argparse.Namespace) -> None:
         doc_path, code_path, output_dir,
     )
 
-    agent = DocentAgent(
+    agent = HermesAgent(
         config=config,
         doc_path=doc_path,
         code_path=code_path,
@@ -82,7 +82,7 @@ def main():
         epilog="""\
 examples:
   lyingdocs analyze --doc-path docs/ --code-path . -o output/audit
-  lyingdocs analyze --doc-path docs/ --code-path . --no-codex
+  lyingdocs analyze --doc-path docs/ --code-path . --argus-backend=local
   lyingdocs analyze --doc-path docs/ --code-path . --config lyingdocs.toml
 """,
     )
@@ -99,32 +99,42 @@ examples:
         help="Output directory (default: output/)",
     )
     analyze_parser.add_argument(
-        "--model", "-m", default=None,
-        help="LLM model name (overrides config/env)",
+        "--hermes-model", default=None,
+        help="Hermes (planner) LLM model name (overrides config/env)",
     )
     analyze_parser.add_argument(
-        "--base-url", default=None,
-        help="API base URL (overrides config/env)",
+        "--hermes-base-url", default=None,
+        help="Hermes API base URL (overrides config/env)",
     )
     analyze_parser.add_argument(
-        "--codex-provider", default=None,
-        help="Codex CLI model provider name",
+        "--argus-backend", choices=("codex", "claude_code", "local"), default=None,
+        help="Argus (code analysis) backend: codex, claude_code, or local",
     )
     analyze_parser.add_argument(
-        "--wire-api", default=None,
-        help="Codex CLI provider wire_api setting (e.g. 'responses' or 'chat')",
+        "--argus-model", default=None,
+        help="Argus LLM model name (overrides config/env)",
     )
     analyze_parser.add_argument(
-        "--max-dispatches", type=int, default=DEFAULTS["max_dispatches"],
-        help="Max Codex CLI dispatches (default: %(default)s)",
+        "--argus-base-url", default=None,
+        help="Argus API base URL (overrides config/env)",
     )
     analyze_parser.add_argument(
-        "--max-iterations", type=int, default=DEFAULTS["max_iterations"],
-        help="Max agent loop iterations (default: %(default)s)",
+        "--argus-codex-provider", default=None,
+        help="Argus/codex backend: provider name",
     )
     analyze_parser.add_argument(
-        "--no-codex", action="store_true",
-        help="Disable Codex CLI integration (doc-only analysis)",
+        "--argus-codex-wire-api", default=None,
+        help="Argus/codex backend: provider wire_api ('responses' or 'chat')",
+    )
+    analyze_parser.add_argument(
+        "--max-dispatches", type=int, default=None,
+        help=f"Max Argus dispatches (default: {DEFAULTS['max_dispatches']}, "
+             "config file / env override this)",
+    )
+    analyze_parser.add_argument(
+        "--max-iterations", type=int, default=None,
+        help=f"Max Hermes loop iterations (default: {DEFAULTS['max_iterations']}, "
+             "config file / env override this)",
     )
     analyze_parser.add_argument(
         "--config", default=None,

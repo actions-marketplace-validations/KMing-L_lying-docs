@@ -1,0 +1,17 @@
+# Argus backend: claude_code (Claude Code CLI subprocess, `claude -p`)
+[hermes]
+model = "gpt-5.4-mini"
+base_url = "https://api.openai.com/v1"
+
+[argus]
+backend = "claude_code"
+model = "Sonnet"
+
+[argus.claude_code]
+# path = "/usr/local/bin/claude"  # optional; else resolved via PATH
+
+[limits]
+max_dispatches = 2
+max_iterations = 5
+argus_task_timeout = 600
+token_budget = 200000
