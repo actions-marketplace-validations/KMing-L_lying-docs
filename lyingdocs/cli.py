@@ -159,6 +159,89 @@ examples:
     )
     analyze_parser.set_defaults(func=cmd_analyze)
 
+    # -- init-ci subcommand --
+    init_ci_parser = subparsers.add_parser(
+        "init-ci",
+        help="Generate a GitHub Actions workflow for LyingDocs CI",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+examples:
+  lyingdocs init-ci --doc-path docs/ --code-path .
+  lyingdocs init-ci --doc-path docs/ --backend claude_code --trigger tag
+  lyingdocs init-ci --doc-path docs/ --trigger pr,tag --approval
+  lyingdocs init-ci --doc-path docs/ --trigger tag,manual -o .
+""",
+    )
+    init_ci_parser.add_argument(
+        "--doc-path", default="docs/",
+        help="Documentation root directory (default: docs/)",
+    )
+    init_ci_parser.add_argument(
+        "--code-path", default=".",
+        help="Code repository root (default: .)",
+    )
+    init_ci_parser.add_argument(
+        "--backend", choices=("local", "codex", "claude_code"), default="local",
+        help="Argus backend (default: local)",
+    )
+    init_ci_parser.add_argument(
+        "--trigger", default="pr,tag",
+        help=(
+            "Comma-separated triggers: pr, tag, manual, schedule "
+            "(default: pr,tag)"
+        ),
+    )
+    init_ci_parser.add_argument(
+        "--branch", default="main",
+        help="Target branch for PR trigger (default: main)",
+    )
+    init_ci_parser.add_argument(
+        "--cron", default="0 9 * * 1",
+        help="Cron expression for schedule trigger (default: '0 9 * * 1')",
+    )
+    init_ci_parser.add_argument(
+        "--approval", action="store_true",
+        help="Add a manual approval step (requires GitHub Environment setup)",
+    )
+    init_ci_parser.add_argument(
+        "--no-comment", action="store_true",
+        help="Disable automatic PR comment with findings",
+    )
+    init_ci_parser.add_argument(
+        "--claude-oauth", action="store_true",
+        help=(
+            "Use Claude OAuth token instead of API key for claude_code backend. "
+            "Pro/Max users can use subscription quota instead of per-API-call billing. "
+            "Generate token with: claude setup-token"
+        ),
+    )
+    init_ci_parser.add_argument(
+        "--gen-issue", action="store_true",
+        help="Generate GitHub issue drafts from findings",
+    )
+    init_ci_parser.add_argument(
+        "--hermes-model", default=None,
+        help="Override Hermes LLM model",
+    )
+    init_ci_parser.add_argument(
+        "--argus-model", default=None,
+        help="Override Argus LLM model",
+    )
+    init_ci_parser.add_argument(
+        "--action-ref", default="lkm-pub/lyingdocs@v1",
+        help="GitHub Action reference (default: lkm-pub/lyingdocs@v1)",
+    )
+    init_ci_parser.add_argument(
+        "--output", "-o", default=".",
+        help=(
+            "Output path. If a directory, writes to "
+            "<dir>/.github/workflows/lyingdocs.yml (default: .)"
+        ),
+    )
+
+    from .init_ci import cmd_init_ci
+    init_ci_parser.set_defaults(func=cmd_init_ci)
+
     # -- version subcommand --
     version_parser = subparsers.add_parser("version", help="Show version")
     version_parser.set_defaults(func=cmd_version)

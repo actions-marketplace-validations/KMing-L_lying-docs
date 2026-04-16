@@ -1,0 +1,256 @@
+name: "LyingDocs"
+description: "Documentation-code misalignment detection. A trust layer for your repository."
+author: "LyingDocs"
+
+branding:
+  icon: "shield"
+  color: "orange"
+
+inputs:
+  doc-path:
+    description: "Path to documentation root directory (relative to repo root)"
+    required: true
+    default: "docs"
+  code-path:
+    description: "Path to code repository root (relative to repo root)"
+    required: false
+    default: "."
+  config:
+    description: "Path to lyingdocs.toml config file (optional)"
+    required: false
+    default: ""
+
+  # --- Backend selection ---
+  backend:
+    description: "Argus backend: local, claude_code, or codex"
+    required: false
+    default: "local"
+
+  # --- Hermes (planner) configuration ---
+  hermes-model:
+    description: "LLM model for Hermes agent"
+    required: false
+    default: ""
+  hermes-base-url:
+    description: "API base URL for Hermes agent"
+    required: false
+    default: ""
+
+  # --- Argus (code analyzer) configuration ---
+  argus-model:
+    description: "LLM model for Argus agent"
+    required: false
+    default: ""
+  argus-base-url:
+    description: "API base URL for Argus agent"
+    required: false
+    default: ""
+
+  # --- API keys ---
+  openai-api-key:
+    description: "OpenAI API key (for local/codex backends)"
+    required: false
+    default: ""
+  anthropic-api-key:
+    description: "Anthropic API key (for claude_code backend, billed per API usage)"
+    required: false
+    default: ""
+  claude-oauth-token:
+    description: "Claude Code OAuth token (for claude_code backend, uses Pro/Max subscription quota). Generate with: claude setup-token"
+    required: false
+    default: ""
+
+  # --- Limits ---
+  max-dispatches:
+    description: "Maximum number of Argus dispatches"
+    required: false
+    default: ""
+  max-iterations:
+    description: "Maximum Hermes loop iterations"
+    required: false
+    default: ""
+
+  # --- Output options ---
+  gen-issue:
+    description: "Generate GitHub issue drafts from findings (true/false)"
+    required: false
+    default: "false"
+  comment-on-pr:
+    description: "Post findings as a PR comment (true/false)"
+    required: false
+    default: "true"
+  python-version:
+    description: "Python version to use"
+    required: false
+    default: "3.12"
+
+outputs:
+  report-path:
+    description: "Path to the generated Misalignment Report"
+    value: ${{ steps.run.outputs.report-path }}
+  findings-count:
+    description: "Number of misalignment findings"
+    value: ${{ steps.run.outputs.findings-count }}
+  has-findings:
+    description: "Whether any misalignments were found (true/false)"
+    value: ${{ steps.run.outputs.has-findings }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install LyingDocs
+      shell: bash
+      run: pip install lyingdocs
+
+    - name: Run LyingDocs analysis
+      id: run
+      shell: bash
+      env:
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-oauth-token }}
+      run: |
+        # Build command
+        CMD="lyingdocs analyze"
+        CMD="$CMD --doc-path ${{ inputs.doc-path }}"
+        CMD="$CMD --code-path ${{ inputs.code-path }}"
+        CMD="$CMD --output-dir lyingdocs-output"
+        CMD="$CMD --argus-backend ${{ inputs.backend }}"
+
+        # Optional config file
+        if [ -n "${{ inputs.config }}" ]; then
+          CMD="$CMD --config ${{ inputs.config }}"
+        fi
+
+        # Optional model overrides
+        if [ -n "${{ inputs.hermes-model }}" ]; then
+          CMD="$CMD --hermes-model ${{ inputs.hermes-model }}"
+        fi
+        if [ -n "${{ inputs.hermes-base-url }}" ]; then
+          CMD="$CMD --hermes-base-url ${{ inputs.hermes-base-url }}"
+        fi
+        if [ -n "${{ inputs.argus-model }}" ]; then
+          CMD="$CMD --argus-model ${{ inputs.argus-model }}"
+        fi
+        if [ -n "${{ inputs.argus-base-url }}" ]; then
+          CMD="$CMD --argus-base-url ${{ inputs.argus-base-url }}"
+        fi
+
+        # Optional limits
+        if [ -n "${{ inputs.max-dispatches }}" ]; then
+          CMD="$CMD --max-dispatches ${{ inputs.max-dispatches }}"
+        fi
+        if [ -n "${{ inputs.max-iterations }}" ]; then
+          CMD="$CMD --max-iterations ${{ inputs.max-iterations }}"
+        fi
+
+        # Optional issue generation
+        if [ "${{ inputs.gen-issue }}" = "true" ]; then
+          CMD="$CMD --gen-issue"
+        fi
+
+        echo "Running: $CMD"
+        eval $CMD
+
+        # Set outputs
+        REPORT="lyingdocs-output/Misalignment_Report.md"
+        if [ -f "$REPORT" ]; then
+          echo "report-path=$REPORT" >> "$GITHUB_OUTPUT"
+
+          # Count findings from JSONL
+          FINDINGS_FILE="lyingdocs-output/findings.jsonl"
+          if [ -f "$FINDINGS_FILE" ]; then
+            COUNT=$(wc -l < "$FINDINGS_FILE")
+          else
+            COUNT=0
+          fi
+          echo "findings-count=$COUNT" >> "$GITHUB_OUTPUT"
+
+          if [ "$COUNT" -gt 0 ]; then
+            echo "has-findings=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-findings=false" >> "$GITHUB_OUTPUT"
+          fi
+        else
+          echo "report-path=" >> "$GITHUB_OUTPUT"
+          echo "findings-count=0" >> "$GITHUB_OUTPUT"
+          echo "has-findings=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Add report to job summary
+      if: always()
+      shell: bash
+      run: |
+        REPORT="lyingdocs-output/Misalignment_Report.md"
+        if [ -f "$REPORT" ]; then
+          echo "## LyingDocs Misalignment Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "## LyingDocs" >> "$GITHUB_STEP_SUMMARY"
+          echo "No report generated." >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - name: Comment on PR
+      if: >-
+        inputs.comment-on-pr == 'true'
+        && github.event_name == 'pull_request'
+        && always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const reportPath = 'lyingdocs-output/Misalignment_Report.md';
+
+          let body;
+          if (fs.existsSync(reportPath)) {
+            const report = fs.readFileSync(reportPath, 'utf8');
+            const findingsCount = '${{ steps.run.outputs.findings-count }}';
+            const icon = findingsCount > 0 ? ':warning:' : ':white_check_mark:';
+            body = `## ${icon} LyingDocs Misalignment Report\n\n`
+              + `**${findingsCount} misalignment(s) found.**\n\n`
+              + `<details>\n<summary>Click to expand full report</summary>\n\n`
+              + `${report}\n\n</details>`;
+          } else {
+            body = '## LyingDocs\n\nAnalysis did not produce a report.';
+          }
+
+          // Find existing LyingDocs comment to update (avoid spam)
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          const existing = comments.find(c =>
+            c.body.includes('LyingDocs Misalignment Report')
+            && c.user.type === 'Bot'
+          );
+
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+          }
+
+    - name: Upload artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: lyingdocs-report
+        path: lyingdocs-output/
+        if-no-files-found: ignore
