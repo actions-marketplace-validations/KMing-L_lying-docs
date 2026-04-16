@@ -21,12 +21,14 @@ Example configs live in [tests/configs](../tests/configs).
 
 ```toml
 [hermes]
+provider = "openai"         # "openai" | "anthropic"
 model = "gpt-5.4"
 base_url = "https://api.openai.com/v1"
-# api_key_env = "OPENAI_API_KEY"  # optional — defaults to OPENAI_API_KEY
+# api_key_env = "OPENAI_API_KEY"  # optional — auto-set to ANTHROPIC_API_KEY when provider = "anthropic"
 
 [argus]
 backend = "local"           # "codex" | "claude_code" | "local"
+provider = "openai"         # "openai" | "anthropic" (only used when backend = "local")
 model = "gpt-5.4"
 base_url = "https://api.openai.com/v1"
 # api_key_env = "OPENAI_API_KEY"
@@ -59,9 +61,12 @@ token_budget = 524288       # Hermes context budget before compression
 
 | Variable                 | Description                                    |
 | ------------------------ | ---------------------------------------------- |
-| `OPENAI_API_KEY`         | Required unless overridden via `api_key_env`   |
+| `OPENAI_API_KEY`         | Required for OpenAI provider                   |
+| `ANTHROPIC_API_KEY`      | Required for Anthropic provider                |
+| `HERMES_PROVIDER`        | `openai` or `anthropic`                        |
 | `HERMES_MODEL`           | Hermes model name                              |
 | `HERMES_BASE_URL`        | Hermes API base URL                            |
+| `ARGUS_PROVIDER`         | `openai` or `anthropic` (local backend only)   |
 | `ARGUS_BACKEND`          | `codex`, `claude_code`, or `local`             |
 | `ARGUS_MODEL`            | Argus model name                               |
 | `ARGUS_BASE_URL`         | Argus API base URL                             |

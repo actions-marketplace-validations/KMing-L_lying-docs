@@ -34,6 +34,32 @@ lyingdocs analyze --doc-path docs/ --code-path . --config myconfig.toml
 lyingdocs analyze --doc-path docs/ --code-path . --gen-issue
 ```
 
+### `lyingdocs init-ci`
+
+Generate a GitHub Actions workflow for LyingDocs CI integration.
+
+```bash
+lyingdocs init-ci [options]
+```
+
+**Examples:**
+
+```bash
+# Default: PR + tag triggers, local backend
+lyingdocs init-ci --doc-path docs/ --code-path .
+
+# Claude Code backend with OAuth token
+lyingdocs init-ci --doc-path docs/ --backend claude_code --claude-oauth
+
+# Only on tags + manual trigger, with approval gate
+lyingdocs init-ci --doc-path docs/ --trigger tag,manual --approval
+
+# Custom output path
+lyingdocs init-ci --doc-path docs/ --trigger tag -o my-project/
+```
+
+See [GitHub Actions Integration](guides/github-actions.md) for the full setup guide.
+
 ### `lyingdocs version`
 
 Display the installed version.
@@ -45,6 +71,8 @@ lyingdocs version
 ---
 
 ## Flags
+
+### `analyze` flags
 
 | Flag | Description |
 | --- | --- |
@@ -63,6 +91,26 @@ lyingdocs version
 | `--argus-codex-wire-api` | Wire API for Codex backend (`responses` or `chat`) |
 | `--max-dispatches` | Max number of Argus tasks per run |
 | `--max-iterations` | Max Hermes agent loop iterations |
+
+### `init-ci` flags
+
+| Flag | Description |
+| --- | --- |
+| `--doc-path` | Documentation root directory (default: `docs/`) |
+| `--code-path` | Code repository root (default: `.`) |
+| `--backend` | Argus backend: `local`, `codex`, or `claude_code` |
+| `--trigger` | Comma-separated triggers: `pr`, `tag`, `manual`, `schedule` (default: `pr,tag`) |
+| `--branch` | Target branch for PR trigger (default: `main`) |
+| `--cron` | Cron expression for schedule trigger (default: `0 9 * * 1`) |
+| `--approval` | Add a manual approval step via GitHub Environments |
+| `--no-comment` | Disable automatic PR comment with findings |
+| `--claude-oauth` | Use Claude OAuth token instead of API key (Pro/Max subscription) |
+| `--gen-issue` | Generate GitHub issue drafts from findings |
+| `--hermes-provider` | LLM provider for Hermes: `openai` or `anthropic` (default: `anthropic` for `claude_code`, `openai` otherwise) |
+| `--hermes-model` | Override Hermes LLM model |
+| `--argus-model` | Override Argus LLM model |
+| `--action-ref` | GitHub Action reference (default: `KMing-L/lyingdocs@v1`) |
+| `-o`, `--output` | Output path (default: `.` — writes to `.github/workflows/lyingdocs.yml`) |
 
 ---
 

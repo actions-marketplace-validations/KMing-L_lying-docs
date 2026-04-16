@@ -149,6 +149,7 @@ This performs a full audit of your repository and produces a report describing w
 | [Configuration](docs/configuration.md) | Config file schema, environment variables, layer resolution |
 | [Argus Backends](docs/backends.md) | Setup for `local`, `codex`, and `claude_code` |
 | [CLI Reference](docs/cli.md) | All flags, commands, and output artifacts |
+| [GitHub Actions](docs/guides/github-actions.md) | CI integration, authentication, triggers, and approval gates |
 | [GitHub Issues](docs/guides/github-issues.md) | Using `--gen-issue` to draft and post issues |
 
 ---
@@ -179,22 +180,24 @@ These categories represent different ways repository trust breaks down.
 
 ---
 
-## GitHub Actions direction
+## GitHub Actions
 
-LyingDocs is moving toward a natural next step:
+LyingDocs runs natively in GitHub Actions as a trust gate for your CI pipeline.
 
-**continuous trust enforcement inside GitHub Actions**
+```bash
+pip install lyingdocs
+lyingdocs init-ci --doc-path docs/ --backend claude_code --claude-oauth --trigger tag,manual
+```
 
-The long-term shape of the project is not “run this manually forever.”
-The long-term shape is:
+This generates a workflow that:
 
-* run on pull requests
-* comment on suspicious docs/code drift
-* warn maintainers before release
-* surface trust regressions early
-* make repository truthfulness part of CI
+* audits docs-vs-code alignment on every tag push (or on demand)
+* posts findings as a PR comment
+* optionally requires manual approval before merging
 
-That is where LyingDocs becomes most valuable: not only as an analyzer, but as infrastructure.
+Supports all three backends (`local`, `codex`, `claude_code`) and both API key and OAuth token authentication for Claude Code.
+
+See the [full setup guide](docs/guides/github-actions.md) for trigger options, approval gates, and backend configuration.
 
 ---
 
@@ -202,7 +205,7 @@ That is where LyingDocs becomes most valuable: not only as an analyzer, but as i
 
 * [x] **Multi-harness support** — Argus runs on Codex, Claude Code, or a built-in local agent
 * [x] **Issue generation** — `--gen-issue` drafts GitHub issues from findings
-* [ ] **GitHub Action integration** — run LyingDocs automatically in PRs and CI to catch trust regressions as they are introduced
+* [x] **GitHub Action integration** — `lyingdocs init-ci` generates a ready-to-use workflow with configurable triggers, backend selection, PR comments, and manual approval gates
 * [ ] **One-session memory support** — Argus backends retain state across tasks for deeper multi-step investigations
 * [ ] **Deeper analysis** — multi-hop reasoning across doc hierarchies and version-aware diffing to detect when code changed but docs did not
 * [ ] **Paper mode** — treat academic papers as documentation and detect paper-to-code misalignment
