@@ -1,0 +1,19 @@
+# Full Anthropic setup: Hermes + Argus both use Anthropic API
+[hermes]
+provider = "anthropic"
+model = "claude-sonnet-4-6"
+
+[argus]
+backend = "local"
+provider = "anthropic"
+model = "claude-sonnet-4-6"
+
+[argus.local]
+max_iterations = 15
+max_read_bytes = 100000
+
+[limits]
+max_dispatches = 2
+max_iterations = 2
+argus_task_timeout = 600
+token_budget = 200000

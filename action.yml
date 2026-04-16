@@ -26,6 +26,16 @@ inputs:
     required: false
     default: "local"
 
+  # --- Provider selection ---
+  hermes-provider:
+    description: "LLM provider for Hermes agent: openai or anthropic. Auto-set to 'anthropic' when backend is claude_code."
+    required: false
+    default: ""
+  argus-provider:
+    description: "LLM provider for Argus local backend: openai or anthropic"
+    required: false
+    default: ""
+
   # --- Hermes (planner) configuration ---
   hermes-model:
     description: "LLM model for Hermes agent"
@@ -115,6 +125,26 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-oauth-token }}
       run: |
+        # Provider auto-detection:
+        # - If user explicitly set hermes-provider, use it.
+        # - If backend=claude_code and ANTHROPIC_API_KEY is available but
+        #   OPENAI_API_KEY is not, default Hermes to anthropic.
+        # - Otherwise leave it to lyingdocs config defaults (openai).
+        HERMES_PROVIDER="${{ inputs.hermes-provider }}"
+        if [ -z "$HERMES_PROVIDER" ] && [ "${{ inputs.backend }}" = "claude_code" ]; then
+          if [ -n "$ANTHROPIC_API_KEY" ] && [ -z "$OPENAI_API_KEY" ]; then
+            HERMES_PROVIDER="anthropic"
+          fi
+        fi
+        if [ -n "$HERMES_PROVIDER" ]; then
+          export HERMES_PROVIDER
+        fi
+
+        ARGUS_PROVIDER="${{ inputs.argus-provider }}"
+        if [ -n "$ARGUS_PROVIDER" ]; then
+          export ARGUS_PROVIDER
+        fi
+
         # Build command
         CMD="lyingdocs analyze"
         CMD="$CMD --doc-path ${{ inputs.doc-path }}"

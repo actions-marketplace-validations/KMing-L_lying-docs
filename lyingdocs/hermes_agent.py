@@ -7,7 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .doctree import DocTree
-from .llm import call_llm, call_llm_with_tools, make_client
+from .llm import LLMResponse, call_llm, call_llm_with_tools, make_client
 from .tools import TOOL_SCHEMAS, ToolExecutor
 from .workspace import Workspace
 
@@ -31,9 +31,11 @@ class HermesAgent:
         self.code_path = code_path
         self.output_dir = output_dir
 
+        self.provider = config.get("hermes_provider", "openai")
         self.client = make_client(
             api_key=config["hermes_api_key"],
             base_url=config["hermes_base_url"],
+            provider=self.provider,
         )
         self.model = config["hermes_model"]
         self.max_iterations = config.get("max_iterations", 50)
@@ -99,7 +101,8 @@ class HermesAgent:
 
             # Call LLM with tools
             response = call_llm_with_tools(
-                self.client, self.model, self.messages, TOOL_SCHEMAS
+                self.client, self.model, self.messages, TOOL_SCHEMAS,
+                provider=self.provider,
             )
 
             # Append assistant message
@@ -226,8 +229,8 @@ class HermesAgent:
             "files, then formulate targeted questions for Argus."
         )
 
-    def _response_to_message(self, response) -> dict:
-        """Convert an OpenAI response message to a serializable dict."""
+    def _response_to_message(self, response: LLMResponse) -> dict:
+        """Convert an LLMResponse to a serializable message dict."""
         msg = {"role": "assistant"}
         if response.content:
             msg["content"] = response.content
@@ -290,6 +293,7 @@ class HermesAgent:
                 "Be concise but complete — this summary replaces the original messages."
             ),
             summary_text,
+            provider=self.provider,
         )
 
         # Replace old messages with summary
@@ -337,7 +341,8 @@ class HermesAgent:
         )
 
         report = call_llm(
-            self.client, self.model, synthesis_prompt, user_content
+            self.client, self.model, synthesis_prompt, user_content,
+            provider=self.provider,
         )
 
         report_path.write_text(report, encoding="utf-8")
@@ -369,7 +374,10 @@ class HermesAgent:
             "Generating issue for %d findings...", len(self.workspace.findings)
         )
 
-        raw = call_llm(self.client, self.model, issue_prompt, findings_json)
+        raw = call_llm(
+            self.client, self.model, issue_prompt, findings_json,
+            provider=self.provider,
+        )
 
         # Strip accidental markdown fences if the model added them
         raw = raw.strip()

@@ -9,7 +9,7 @@ import logging
 import re
 from pathlib import Path
 
-from .llm import call_llm_with_tools, make_client
+from .llm import LLMResponse, call_llm_with_tools, make_client
 
 logger = logging.getLogger("lyingdocs")
 
@@ -126,9 +126,11 @@ class LocalArgus:
     def __init__(self, config: dict, code_path: Path):
         self.config = config
         self.code_root = code_path.resolve()
+        self.provider = config.get("argus_provider", "openai")
         self.client = make_client(
             api_key=config["argus_api_key"],
             base_url=config["argus_base_url"],
+            provider=self.provider,
         )
         self.model = config["argus_model"]
         self.max_iterations = int(config.get("argus_local_max_iterations", 25))
@@ -149,7 +151,8 @@ class LocalArgus:
         for iteration in range(1, self.max_iterations + 1):
             logger.info("  Argus(local) iter %d/%d", iteration, self.max_iterations)
             response = call_llm_with_tools(
-                self.client, self.model, messages, ARGUS_LOCAL_TOOL_SCHEMAS
+                self.client, self.model, messages, ARGUS_LOCAL_TOOL_SCHEMAS,
+                provider=self.provider,
             )
             messages.append(self._response_to_message(response))
 

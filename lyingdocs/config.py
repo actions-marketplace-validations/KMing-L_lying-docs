@@ -8,14 +8,18 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+VALID_PROVIDERS = ("openai", "anthropic")
+
 DEFAULTS = {
     # Hermes (planner agent)
+    "hermes_provider": "openai",  # "openai" | "anthropic"
     "hermes_model": "gpt-5.4",
     "hermes_base_url": "https://api.openai.com/v1",
     "hermes_api_key_env": "OPENAI_API_KEY",
 
     # Argus (code analysis agent)
     "argus_backend": "local",  # "codex" | "claude_code" | "local"
+    "argus_provider": "openai",  # "openai" | "anthropic" (only used when backend=local)
     "argus_model": "gpt-5.4",
     "argus_base_url": "https://api.openai.com/v1",
     "argus_api_key_env": "OPENAI_API_KEY",
@@ -92,6 +96,8 @@ def _load_config_file(path: Path) -> dict:
 
     # [hermes]
     hermes = raw.get("hermes", {})
+    if "provider" in hermes:
+        flat["hermes_provider"] = hermes["provider"]
     if "model" in hermes:
         flat["hermes_model"] = hermes["model"]
     if "base_url" in hermes:
@@ -101,6 +107,8 @@ def _load_config_file(path: Path) -> dict:
 
     # [argus]
     argus = raw.get("argus", {})
+    if "provider" in argus:
+        flat["argus_provider"] = argus["provider"]
     if "backend" in argus:
         backend = argus["backend"]
         if backend not in VALID_ARGUS_BACKENDS:
@@ -169,8 +177,10 @@ def load_config(args: argparse.Namespace) -> dict:
 
     # Layer: environment variables
     env_map = {
+        "HERMES_PROVIDER": "hermes_provider",
         "HERMES_MODEL": "hermes_model",
         "HERMES_BASE_URL": "hermes_base_url",
+        "ARGUS_PROVIDER": "argus_provider",
         "ARGUS_BACKEND": "argus_backend",
         "ARGUS_MODEL": "argus_model",
         "ARGUS_BASE_URL": "argus_base_url",
@@ -214,6 +224,31 @@ def load_config(args: argparse.Namespace) -> dict:
             f"ERROR: argus backend {config['argus_backend']!r} is invalid. "
             f"Must be one of: {', '.join(VALID_ARGUS_BACKENDS)}."
         )
+
+    # Validate providers
+    for agent in ("hermes", "argus"):
+        prov = config.get(f"{agent}_provider", "openai")
+        if prov not in VALID_PROVIDERS:
+            sys.exit(
+                f"ERROR: {agent}.provider = {prov!r} is invalid. "
+                f"Must be one of: {', '.join(VALID_PROVIDERS)}."
+            )
+
+    # Auto-resolve defaults based on provider
+    OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1"
+    ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com"
+
+    for agent in ("hermes", "argus"):
+        provider = config[f"{agent}_provider"]
+        if provider == "anthropic":
+            # Auto-switch api_key_env if still at OpenAI default
+            key_env_key = f"{agent}_api_key_env"
+            if config.get(key_env_key) == "OPENAI_API_KEY":
+                config[key_env_key] = "ANTHROPIC_API_KEY"
+            # Auto-switch base_url if still at OpenAI default
+            base_url_key = f"{agent}_base_url"
+            if config.get(base_url_key) == OPENAI_DEFAULT_BASE_URL:
+                config[base_url_key] = ANTHROPIC_DEFAULT_BASE_URL
 
     # API keys (per-agent)
     config["hermes_api_key"] = _resolve_api_key(config, "hermes")

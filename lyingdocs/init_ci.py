@@ -90,6 +90,7 @@ def _build_backend_setup(backend: str) -> str:
 
 def _build_action_inputs(
     backend: str,
+    hermes_provider: str,
     comment_on_pr: bool,
     gen_issue: bool,
     hermes_model: str,
@@ -99,16 +100,37 @@ def _build_action_inputs(
     """Build the `with:` block entries beyond doc-path/code-path/backend."""
     lines = []
 
-    # API key / token secrets
-    if backend in ("local", "codex"):
+    # Hermes provider (explicit when not the default for this backend)
+    if hermes_provider == "openai" and backend == "claude_code":
+        lines.append('          hermes-provider: "openai"')
+    elif hermes_provider == "anthropic" and backend not in ("claude_code",):
+        lines.append('          hermes-provider: "anthropic"')
+
+    # Determine which providers are actually in use
+    # Hermes uses hermes_provider; Argus(claude_code) uses Claude CLI (oauth or api key)
+    hermes_needs_openai = hermes_provider == "openai"
+    hermes_needs_anthropic = hermes_provider == "anthropic"
+
+    # Argus needs: claude_code → CLI auth (oauth token OR anthropic key);
+    #              local/codex → same provider as config (always openai for these backends)
+    argus_needs_anthropic_key = (
+        backend == "claude_code" and not claude_oauth
+    )
+
+    needs_openai = hermes_needs_openai or backend in ("local", "codex")
+    needs_anthropic = hermes_needs_anthropic or argus_needs_anthropic_key
+
+    if needs_openai:
         lines.append('          openai-api-key: ${{ secrets.OPENAI_API_KEY }}')
-    if backend == "claude_code":
-        if claude_oauth:
-            lines.append('          claude-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}')
-            lines.append('          # Using OAuth token (Pro/Max subscription quota)')
-            lines.append('          # Generate with: claude setup-token')
-        else:
-            lines.append('          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}')
+        # Optional: set OPENAI_BASE_URL in repo Variables for custom endpoints
+        if hermes_needs_openai:
+            lines.append('          hermes-base-url: ${{ vars.OPENAI_BASE_URL }}')
+    if needs_anthropic:
+        lines.append('          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}')
+    if claude_oauth:
+        lines.append('          claude-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}')
+        lines.append('          # OAuth token for Argus (Claude Code CLI, Pro/Max subscription quota)')
+        lines.append('          # Generate with: claude setup-token')
 
     # PR comment toggle
     if comment_on_pr:
@@ -134,6 +156,7 @@ def generate_workflow(
     doc_path: str = "docs/",
     code_path: str = ".",
     backend: str = "local",
+    hermes_provider: str = "",
     triggers: list[str] | None = None,
     branch: str = "main",
     cron: str = "0 9 * * 1",
@@ -143,7 +166,7 @@ def generate_workflow(
     hermes_model: str = "",
     argus_model: str = "",
     claude_oauth: bool = False,
-    action_ref: str = "lkm-pub/lyingdocs@v1",
+    action_ref: str = "KMing-L/lyingdocs@v1",
 ) -> str:
     """Generate a complete GitHub Actions workflow YAML string."""
     if triggers is None:
@@ -151,9 +174,41 @@ def generate_workflow(
 
     trigger_block = _build_triggers(triggers, branch, cron)
     backend_setup = _build_backend_setup(backend)
+    # Default hermes_provider:
+    #  - claude_code without oauth → anthropic (single ANTHROPIC_API_KEY for both)
+    #  - claude_code with oauth    → openai (avoids needing ANTHROPIC_API_KEY;
+    #                                 oauth only works with CLI, not SDK)
+    #  - local/codex               → openai
+    effective_hermes_provider = hermes_provider
+    if not effective_hermes_provider:
+        if backend == "claude_code" and not claude_oauth:
+            effective_hermes_provider = "anthropic"
+        else:
+            effective_hermes_provider = "openai"
+
+    # Default models based on provider/backend when not explicitly set
+    effective_hermes_model = hermes_model
+    if not effective_hermes_model:
+        effective_hermes_model = (
+            "claude-sonnet-4-6" if effective_hermes_provider == "anthropic"
+            else "gpt-5.4"
+        )
+    effective_argus_model = argus_model
+    if not effective_argus_model:
+        if backend == "claude_code":
+            effective_argus_model = "claude-sonnet-4-6"
+        elif backend == "codex":
+            effective_argus_model = "gpt-5.4"
+        else:
+            # local backend: match hermes provider by default
+            effective_argus_model = (
+                "claude-sonnet-4-6" if effective_hermes_provider == "anthropic"
+                else "gpt-5.4"
+            )
+
     action_inputs = _build_action_inputs(
-        backend, comment_on_pr, gen_issue, hermes_model, argus_model,
-        claude_oauth=claude_oauth,
+        backend, effective_hermes_provider, comment_on_pr, gen_issue,
+        effective_hermes_model, effective_argus_model, claude_oauth=claude_oauth,
     )
     approval_block = APPROVAL_JOB if approval else ""
 
@@ -165,7 +220,7 @@ def generate_workflow(
         "# Generated by: lyingdocs init-ci",
         "#",
         "# Customize the 'on:' triggers below to control when this runs.",
-        "# See: https://github.com/lkm-pub/lyingdocs",
+        "# See: https://github.com/KMing-L/lyingdocs",
         "# =============================================================================",
         "",
         "name: LyingDocs Audit",
@@ -237,6 +292,7 @@ def cmd_init_ci(args: argparse.Namespace) -> None:
         doc_path=args.doc_path,
         code_path=args.code_path,
         backend=args.backend,
+        hermes_provider=args.hermes_provider or "",
         triggers=triggers,
         branch=args.branch,
         cron=args.cron,
@@ -260,20 +316,41 @@ def cmd_init_ci(args: argparse.Namespace) -> None:
 
     print(f"Workflow generated: {out}")
     print()
-    print("Next steps:")
-    print(f"  1. Review and commit {out}")
-    if args.backend in ("local", "codex"):
-        print("  2. Add OPENAI_API_KEY to your repo secrets (Settings > Secrets)")
-    elif args.backend == "claude_code":
-        if args.claude_oauth:
-            print("  2. Run `claude setup-token` locally to generate an OAuth token")
-            print("     Add CLAUDE_CODE_OAUTH_TOKEN to your repo secrets (Settings > Secrets)")
-            print("     (Uses Pro/Max subscription quota — no per-API-call billing)")
+
+    # Determine effective hermes provider for display (same logic as generate_workflow)
+    hp = args.hermes_provider
+    if not hp:
+        if args.backend == "claude_code" and not args.claude_oauth:
+            hp = "anthropic"
         else:
-            print("  2. Add ANTHROPIC_API_KEY to your repo secrets (Settings > Secrets)")
+            hp = "openai"
+
+    needs_openai = args.backend in ("local", "codex") or hp == "openai"
+    needs_anthropic = (
+        hp == "anthropic"
+        or (args.backend == "claude_code" and not args.claude_oauth)
+    )
+
+    step = 1
+    print("Next steps:")
+    step += 1
+    print(f"  1. Review and commit {out}")
+    secrets = []
+    if needs_openai:
+        secrets.append("OPENAI_API_KEY")
+    if needs_anthropic:
+        secrets.append("ANTHROPIC_API_KEY")
+    if secrets:
+        print(f"  {step}. Add {' and '.join(secrets)} to your repo secrets (Settings > Secrets)")
+        step += 1
+    if args.claude_oauth:
+        print(f"  {step}. Run `claude setup-token` locally to generate an OAuth token")
+        print(f"     Add CLAUDE_CODE_OAUTH_TOKEN to your repo secrets")
+        print(f"     (Argus uses OAuth for Pro/Max subscription quota)")
+        step += 1
     if args.approval:
         print(
-            "  3. Create a 'lyingdocs-review' environment with required reviewers "
+            f"  {step}. Create a 'lyingdocs-review' environment with required reviewers "
             "(Settings > Environments)"
         )
     print()

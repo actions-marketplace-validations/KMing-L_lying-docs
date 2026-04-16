@@ -220,6 +220,13 @@ examples:
         help="Generate GitHub issue drafts from findings",
     )
     init_ci_parser.add_argument(
+        "--hermes-provider", choices=("openai", "anthropic"), default=None,
+        help=(
+            "LLM provider for Hermes: openai or anthropic. "
+            "Default: anthropic when backend=claude_code, otherwise openai"
+        ),
+    )
+    init_ci_parser.add_argument(
         "--hermes-model", default=None,
         help="Override Hermes LLM model",
     )
@@ -228,8 +235,8 @@ examples:
         help="Override Argus LLM model",
     )
     init_ci_parser.add_argument(
-        "--action-ref", default="lkm-pub/lyingdocs@v1",
-        help="GitHub Action reference (default: lkm-pub/lyingdocs@v1)",
+        "--action-ref", default="KMing-L/lyingdocs@v1",
+        help="GitHub Action reference (default: KMing-L/lyingdocs@v1)",
     )
     init_ci_parser.add_argument(
         "--output", "-o", default=".",
